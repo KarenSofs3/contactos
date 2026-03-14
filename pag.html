@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda de Contactos Pro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --bg-light: #f8f9fa;
+        }
+        body { background-color: var(--bg-light); font-family: 'Segoe UI', sans-serif; }
+        .contact-card { transition: 0.3s; border: none; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .contact-card:hover { transform: translateY(-5px); }
+        .category-badge { font-size: 0.75rem; padding: 5px 12px; border-radius: 20px; }
+        #alertContainer { position: fixed; top: 20px; right: 20px; z-index: 1060; }
+    </style>
+</head>
+<body>
+
+    <div id="alertContainer"></div>
+
+    <header class="bg-primary text-white py-4 mb-4 shadow">
+        <div class="container d-flex justify-content-between align-items-center">
+            <h1><i class="bi bi-person-lines-fill"></i>Contactos</h1>
+            <button class="btn btn-light fw-bold" onclick="abrirModalNuevo()"><i class="bi bi-plus-circle"></i> Nuevo Contacto</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="row mb-4 g-3">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" id="inputBusqueda" class="form-control" placeholder="Buscar por nombre (mín. 2 letras)...">
+                </div>
+            </div>
+            <div class="col-md-6 d-flex gap-2 justify-content-md-end">
+                <button class="btn btn-outline-primary filter-btn active" data-cat="todos">Todos</button>
+                <button class="btn btn-outline-primary filter-btn" data-cat="Familia">Familia</button>
+                <button class="btn btn-outline-primary filter-btn" data-cat="Trabajo">Trabajo</button>
+                <button class="btn btn-outline-primary filter-btn" data-cat="Amigos">Amigos</button>
+            </div>
+        </div>
+
+        <div id="listaContactos" class="row g-3"></div>
+    </main>
+
+    <div class="modal fade" id="modalContacto" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalTitle">Nuevo Contacto</h5>
+                    <div id="alertContainer"></div>
+
+                </div>
+                <div class="modal-body">
+                    <form id="formContacto">
+                        <input type="hidden" id="contactoId">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre Completo</label>
+                            <input type="text" id="nombre" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Teléfono (mín. 10 dígitos)</label>
+                            <input type="number" id="telefono" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Correo Electrónico</label>
+                            <input type="email" id="correo" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Categoría</label>
+                            <select id="categoria" class="form-select" required>
+                                <option value="">Seleccione una categoría...</option>
+                                <option value="Familia">Familia</option>
+                                <option value="Trabajo">Trabajo</option>
+                                <option value="Amigos">Amigos</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-primary" onclick="guardarContacto()">Guardar Contacto</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalEliminar" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <p class="mb-4">¿Estás seguro de que deseas eliminar este contacto?</p>
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                    <button class="btn btn-danger" id="btnConfirmarEliminar">Sí, Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // --- Lógica de Datos ---
+        let contactos = JSON.parse(localStorage.getItem('contactos_db')) || [];
+        const modalRef = new bootstrap.Modal(document.getElementById('modalContacto'));
+        const modalEliminarRef = new bootstrap.Modal(document.getElementById('modalEliminar'));
+        let idEliminarTemporal = null;
+
+        // --- Funciones de Utilidad ---
+        function mostrarAlerta(mensaje, tipo = 'success') {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = `
+                <div class="alert alert-${tipo} alert-dismissible fade show shadow" role="alert">
+                    ${mensaje}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>`;
+            document.getElementById('alertContainer').append(wrapper);
+            setTimeout(() => wrapper.remove(), 3000);
+        }
+
+        // --- CRUD ---
+        function abrirModalNuevo() {
+            document.getElementById('formContacto').reset();
+            document.getElementById('contactoId').value = '';
+            document.getElementById('modalTitle').innerText = 'Nuevo Contacto';
+            modalRef.show();
+        }
+
+        function guardarContacto() {
+            const id = document.getElementById('contactoId').value;
+            const nombre = document.getElementById('nombre').value.trim();
+            const telefono = document.getElementById('telefono').value.trim();
+            const correo = document.getElementById('correo').value.trim();
+            const categoria = document.getElementById('categoria').value;
+
+            // 1. Validación de campos vacíos
+            if (!nombre) {
+                return mostrarAlerta("El nombre es un campo obligatorio.", "danger");
+            }else if (!telefono){
+                return mostrarAlerta("El teléfono es un campo obligatorio.", "danger");
+            }else if (!correo){
+                return mostrarAlerta("El correo es un campo obligatorio.", "danger");
+            }else if (!categoria){ 
+                return mostrarAlerta("La categoría es un campo obligatorio.", "danger");
+            }
+
+
+            // 2. Validación de Teléfono (mín 10)
+            if (telefono.length < 10) {
+                return mostrarAlerta("El teléfono debe tener al menos 10 números.", "danger");
+            }
+
+            // 3. Validación de Correo (Regex estándar)
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(correo)) {
+                return mostrarAlerta("El correo debe ser válido (ej. usuario@correo.com).", "danger");
+            }
+
+            // 4. Validación de Duplicados (Solo si es nuevo o cambió el teléfono)
+            const existe = contactos.find(c => c.telefono === telefono && c.id != id);
+            if (existe) {
+                return mostrarAlerta("Este contacto (teléfono) ya es existente.", "warning");
+            }
+
+            const contactoObj = { id: id || Date.now(), nombre, telefono, correo, categoria };
+
+            if (id) {
+                const index = contactos.findIndex(c => c.id == id);
+                contactos[index] = contactoObj;
+                mostrarAlerta("Contacto actualizado con éxito.");
+            } else {
+                contactos.push(contactoObj);
+                mostrarAlerta("Tu contacto fue guardado con éxito.");
+            }
+
+            localStorage.setItem('contactos_db', JSON.stringify(contactos));
+            modalRef.hide();
+            render();
+        }
+
+        function render(data = contactos) {
+            const lista = document.getElementById('listaContactos');
+            lista.innerHTML = '';
+
+            if (data.length === 0) {
+                lista.innerHTML = `<div class="col-12 text-center text-muted mt-5"><h5>No se encontraron contactos.</h5></div>`;
+                return;
+            }
+
+            data.forEach(c => {
+                lista.innerHTML += `
+                    <div class="col-md-4">
+                        <div class="card contact-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title text-primary mb-0">${c.nombre}</h5>
+                                    <span class="badge bg-info text-dark category-badge">${c.categoria}</span>
+                                </div>
+                                <p class="mb-1 text-muted"><i class="bi bi-telephone"></i> ${c.telefono}</p>
+                                <p class="mb-3 text-muted"><i class="bi bi-envelope"></i> ${c.correo}</p>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="editarContacto(${c.id})">Editar</button>
+                                    <button class="btn btn-sm btn-outline-danger flex-grow-1" onclick="confirmarEliminar(${c.id})">Eliminar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // --- Funciones de Interfaz ---
+        window.editarContacto = (id) => {
+            const c = contactos.find(c => c.id == id);
+            document.getElementById('contactoId').value = c.id;
+            document.getElementById('nombre').value = c.nombre;
+            document.getElementById('telefono').value = c.telefono;
+            document.getElementById('correo').value = c.correo;
+            document.getElementById('categoria').value = c.categoria;
+            document.getElementById('modalTitle').innerText = 'Modificar Contacto';
+            modalRef.show();
+        };
+
+        window.confirmarEliminar = (id) => {
+            idEliminarTemporal = id;
+            modalEliminarRef.show();
+        };
+
+        document.getElementById('btnConfirmarEliminar').onclick = () => {
+            contactos = contactos.filter(c => c.id != idEliminarTemporal);
+            localStorage.setItem('contactos_db', JSON.stringify(contactos));
+            modalEliminarRef.hide();
+            render();
+        };
+
+        // --- Filtros y Búsqueda ---
+        document.getElementById('inputBusqueda').oninput = (e) => {
+            const term = e.target.value.toLowerCase();
+            if (term.length >= 2) {
+                const filtrados = contactos.filter(c => c.nombre.toLowerCase().includes(term));
+                render(filtrados);
+                if(filtrados.length === 0) {
+                    document.getElementById('listaContactos').innerHTML = `<div class="col-12 text-center text-muted mt-5"><h5>No se encontraron contactos con ese nombre.</h5></div>`;
+                }
+            } else if (term.length === 0) {
+                render();
+            }
+        };
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                const cat = btn.dataset.cat;
+                if (cat === 'todos') {
+                    render();
+                } else {
+                    const filtrados = contactos.filter(c => c.categoria === cat);
+                    render(filtrados);
+                    if (filtrados.length === 0) {
+                        document.getElementById('listaContactos').innerHTML = `<div class="col-12 text-center text-muted mt-5"><h5>Aún no tienes contactos en esta categoría.</h5></div>`;
+                    }
+                }
+            };
+        });
+
+        // Inicializar
+        render();
+    </script>
+</body>
+</html>
